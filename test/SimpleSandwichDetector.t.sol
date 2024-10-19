@@ -11,21 +11,22 @@ import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
 import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
-import {Counter} from "../src/Counter.sol";
+import {SimpleSandwichDetector} from "../src/SimpleSandwichDetector.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
 
 import {LiquidityAmounts} from "v4-core/test/utils/LiquidityAmounts.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
 import {EasyPosm} from "./utils/EasyPosm.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
-contract CounterTest is Test, Fixtures {
+contract SimpleSandwichDetectorTest is Test, Fixtures {
     using EasyPosm for IPositionManager;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using StateLibrary for IPoolManager;
 
-    Counter hook;
+    SimpleSandwichDetector hook;
     PoolId poolId;
 
     uint256 tokenId;
@@ -41,14 +42,11 @@ contract CounterTest is Test, Fixtures {
 
         // Deploy the hook to an address with the correct flags
         address flags = address(
-            uint160(
-                Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
-                    | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
-            ) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
+            uint160(Hooks.BEFORE_SWAP_FLAG) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
         );
         bytes memory constructorArgs = abi.encode(manager); //Add all the necessary constructor arguments from the hook
-        deployCodeTo("Counter.sol:Counter", constructorArgs, flags);
-        hook = Counter(flags);
+        deployCodeTo("SimpleSandwichDetector.sol:SimpleSandwichDetector", constructorArgs, flags);
+        hook = SimpleSandwichDetector(flags);
 
         // Create the pool
         key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
@@ -81,44 +79,36 @@ contract CounterTest is Test, Fixtures {
         );
     }
 
-    function testCounterHooks() public {
-        // positions were created in setup()
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 0);
+    function testSandwichAttackFailsHooks() public {
+        // Proceed with the first block
+        vm.roll(1);
 
-        assertEq(hook.beforeSwapCount(poolId), 0);
-        assertEq(hook.afterSwapCount(poolId), 0);
+        // Perform an success swap by attacker
+        swap(key, true, -1e18, ZERO_BYTES);
 
-        // Perform a test swap //
-        bool zeroForOne = true;
-        int256 amountSpecified = -1e18; // negative number indicates exact input swap!
-        BalanceDelta swapDelta = swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
-        // ------------------- //
+        // The attacker is able to swap once in this block
+        assertEq(hook.lastSwapBlockByUserByPool(poolId, tx.origin), 1, "Attacker should have swapped");
 
-        assertEq(int256(swapDelta.amount0()), amountSpecified);
-
-        assertEq(hook.beforeSwapCount(poolId), 1);
-        assertEq(hook.afterSwapCount(poolId), 1);
+        // Expect failed second swap for the same pool for the same user within the same block
+        vm.expectRevert();
+        swap(key, true, -1e18, ZERO_BYTES);
     }
 
-    function testLiquidityHooks() public {
-        // positions were created in setup()
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 0);
+    function testSingleSwapHooks() public {
+        // Proceed with the first block
+        vm.roll(1);
 
-        // remove liquidity
-        uint256 liquidityToRemove = 1e18;
-        posm.decreaseLiquidity(
-            tokenId,
-            liquidityToRemove,
-            MAX_SLIPPAGE_REMOVE_LIQUIDITY,
-            MAX_SLIPPAGE_REMOVE_LIQUIDITY,
-            address(this),
-            block.timestamp,
-            ZERO_BYTES
-        );
+        // Perform a successfull swap by the regular user
+        swap(key, true, -1e18, ZERO_BYTES);
 
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 1);
+        // The user is able to swap once in this block
+        assertEq(hook.lastSwapBlockByUserByPool(poolId, tx.origin), 1, "User should have swapped");
+
+        // Proceed with the second block
+        vm.roll(2);
+
+        // Swap should not fail since the new block is arrived
+        swap(key, true, -1e18, ZERO_BYTES);
     }
+
 }
