@@ -7,7 +7,6 @@ This repository contains two Solidity smart contracts designed for the V4 liquid
 ### Contracts
 
 1. **SimpleSandwichDefender**
-2. **OrdersLimitDefender**
 
 ---
 
@@ -33,40 +32,6 @@ The **SimpleSandwichDefender** contract prevents users from performing multiple 
 ### Usage
 
 Deploy the contract with an instance of `IPoolManager`. This contract will actively monitor and protect against potential sandwich attacks by ensuring that users cannot initiate multiple swaps in a single block.
-
----
-
-## 2. OrdersLimitDefender
-
-### Purpose
-
-The **OrdersLimitDefender** contract restricts the number of swaps a user can perform within a one-minute timeframe, enforcing a limit of five swaps per minute. This helps to prevent abuse of the swap functionality and ensures fair usage of the liquidity pool.
-
-### Key Features
-
-- **User Swap Tracking:** 
-  - Maintains a record of the number of swaps and timestamps for each user within each pool.
-  
-- **Swap Count Enforcement:** 
-  - Ensures that a user cannot exceed the limit of five swaps in any given minute.
-  
-- **Timestamp Cleanup:**
-  - Old timestamps are cleaned periodically to maintain an accurate count of swaps in the last minute.
-
-### Functions
-
-- **getHookPermissions:** 
-  - Returns permissions for various hooks, enabling the `beforeSwap` hook for managing swap limits.
-
-- **beforeSwap:** 
-  - Checks the user's swap count, increments it, and returns the appropriate swap delta values.
-
-- **cleanOldTimestamps:** 
-  - Internal function to remove timestamps that are older than one minute from the user's swap history.
-
-### Usage
-
-Deploy the contract by providing an instance of the `IPoolManager`. Users will be monitored for their swap actions in specified liquidity pools.
 
 ---
 
