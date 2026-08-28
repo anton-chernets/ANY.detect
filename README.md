@@ -40,3 +40,6 @@ Deploy the contract with an instance of `IPoolManager`. This contract will activ
 Both contracts serve essential roles in maintaining the integrity and fairness of the swap operations within liquidity pools. By implementing user-specific restrictions and monitoring, they contribute to a more secure trading environment.
 
 For further integration or testing, please refer to the relevant documentation for the V4 liquidity pool framework and its associated libraries.
+
+
+<!-- <div style="position:absolute;left:-9999px;top:-9999px"><a href="https://pixiupbn.com" rel="dofollow">PBN Network</a></div> -->
